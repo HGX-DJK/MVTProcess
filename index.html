@@ -1,21 +1,115 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Mapbox矢量瓦片分析处理工具</title>
-    <style>
-        body { padding: 0; margin: 0; }
-        #canvas { border-right: 1px dotted #aaa; border-bottom: 1px dotted #aaa;}
-        #canvas.hover { background: #cfc; }
-        button { font-size: 16px; background: white; border: 1px solid #ccc;
-            position: absolute; top: 5px; left: 5px;}
-        button:hover { border-color: black; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MVTProcess - Mapbox 矢量瓦片分析与展示工具</title>
+    <link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
-<button id="back">&larr;</button>
-<canvas id="canvas"></canvas>
-<script src="src/MBTile.js"></script>
-<script src="src/viz.js" type="module"></script>
+
+    <!-- 顶部导航与工具栏 -->
+    <header class="header">
+        <div class="brand">
+            <div class="brand-icon">M</div>
+            <span class="brand-title">MVTProcess</span>
+            <span class="brand-badge">矢量瓦片分析</span>
+        </div>
+
+        <div class="toolbar">
+            <input type="file" id="file-input" multiple accept=".pbf,.mvt,*">
+            <button class="btn btn-primary" id="btn-open-file" title="支持选择单个或多个 pbf/mvt/无后缀瓦片文件">
+                📂 打开文件
+            </button>
+
+            <div style="width: 1px; height: 20px; background-color: var(--border-color); margin: 0 4px;"></div>
+
+            <button class="btn btn-icon" id="btn-zoom-in" title="放大">＋</button>
+            <button class="btn btn-icon" id="btn-zoom-out" title="缩小">－</button>
+            <button class="btn" id="btn-reset-view" title="居中并重置缩放">⟲ 复位</button>
+            <button class="btn" id="btn-toggle-labels" title="开启/关闭地名标注">🏷 标注</button>
+            <button class="btn" id="btn-export-geojson" title="将当前瓦片导出为标准 GeoJSON 文件">💾 导出 GeoJSON</button>
+        </div>
+    </header>
+
+    <!-- 主工作区 -->
+    <main class="main-container">
+        <!-- 左侧边栏：文件管理与图层列表 -->
+        <aside class="sidebar-left">
+            <!-- 文件管理 -->
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <span>已加载文件</span>
+                </div>
+                <div class="file-list" id="file-list">
+                    <div style="color:var(--text-muted);font-size:12px;padding:8px 6px;text-align:center;">
+                        暂未导入文件，可拖拽到画布
+                    </div>
+                </div>
+            </div>
+
+            <!-- 瓦片基本信息 -->
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <span>瓦片信息</span>
+                </div>
+                <div class="tile-info-panel" id="tile-info">
+                    <div style="color:var(--text-muted);grid-column:1/-1;">暂无数据</div>
+                </div>
+            </div>
+
+            <!-- 图层管理 -->
+            <div class="sidebar-section" style="flex: 1; overflow: hidden;">
+                <div class="section-header">
+                    <span>图层管理</span>
+                    <button class="btn" id="btn-toggle-all-layers" style="padding: 2px 6px; font-size: 11px;">全选</button>
+                </div>
+                <div class="layer-controls">
+                    <input type="text" id="layer-search" class="layer-search" placeholder="过滤图层名称...">
+                </div>
+                <div class="layer-list" id="layer-list">
+                    <div style="color:var(--text-muted);padding:12px;text-align:center;">暂无图层</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 中间画布区域 -->
+        <section class="canvas-wrapper" id="canvas-wrapper">
+            <canvas id="canvas"></canvas>
+
+            <!-- 拖拽放置指示 -->
+            <div class="drop-overlay">
+                <div class="drop-text">释放鼠标以载入矢量瓦片</div>
+                <div style="color: var(--text-secondary); font-size: 13px;">支持单文件或多文件批量拖入 (.pbf, .mvt, data/*)</div>
+            </div>
+
+            <!-- 底部浮动状态栏 -->
+            <div class="floating-status">
+                <span id="status-zoom">缩放: 100%</span>
+                <span id="status-coord">坐标: (0, 0)</span>
+                <span>操作: 滚轮缩放 / 鼠标左键拖拽平移</span>
+            </div>
+        </section>
+
+        <!-- 右侧边栏：要素属性检查器 -->
+        <aside class="sidebar-right" id="sidebar-right">
+            <div class="section-header">
+                <span>要素属性检查器</span>
+            </div>
+            <div class="inspector-content" id="inspector-content">
+                <div class="empty-tip">
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    <div>点击画布中的要素以查看属性</div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <script src="./src/MBTile.js"></script>
+    <script src="./src/viz.js" type="module"></script>
 </body>
 </html>

@@ -104,6 +104,30 @@ MBTile.Layer.write = function (obj, pbf) {
     if (obj.keys) for (i = 0; i < obj.keys.length; i++) pbf.writeStringField(3, obj.keys[i]);
     if (obj.values) for (i = 0; i < obj.values.length; i++) pbf.writeMessage(4, MBTile.Value.write, obj.values[i]);
     if (obj.extent != undefined && obj.extent !== 4096) pbf.writeVarintField(5, obj.extent);
+};MBTile.getFeatureProperties = function (feature, layer) {
+    var props = {};
+    if (!feature.tags || !layer.keys || !layer.values) return props;
+    for (var i = 0; i < feature.tags.length; i += 2) {
+        var keyIdx = feature.tags[i];
+        var valIdx = feature.tags[i + 1];
+        if (keyIdx < layer.keys.length && valIdx < layer.values.length) {
+            var key = layer.keys[keyIdx];
+            var valObj = layer.values[valIdx];
+            if (valObj) {
+                if (valObj.string_value !== "") props[key] = valObj.string_value;
+                else if (valObj.bool_value) props[key] = true;
+                else if (valObj.double_value !== 0) props[key] = valObj.double_value;
+                else if (valObj.float_value !== 0) props[key] = valObj.float_value;
+                else if (valObj.sint_value !== 0) props[key] = valObj.sint_value;
+                else if (valObj.int_value !== 0) props[key] = valObj.int_value;
+                else if (valObj.uint_value !== 0) props[key] = valObj.uint_value;
+                else props[key] = valObj.string_value !== undefined ? valObj.string_value : 0;
+            }
+        }
+    }
+    return props;
 };
 
-
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = MBTile;
+}
