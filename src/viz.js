@@ -373,7 +373,7 @@ function showFeatureInspector(layer, feature) {
                 ${layer.name}
             </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">
-                类型: <b>${feature.typeName}</b> | ID: <b>${feature.id}</b> | 属性: <b>${propKeys.length} 项</b>
+                类型: <b>${feature.typeName}</b> | ID: <b>${feature.id !== undefined ? feature.id : '无'}</b> | 属性: <b>${propKeys.length} 项</b>
             </div>
         </div>
         ${propKeys.length > 5 ? `
@@ -429,6 +429,11 @@ btnCopyFeatureJson.addEventListener('click', () => {
 function updateStatusUI() {
     statusZoomEl.textContent = `缩放: ${(renderer.zoom * 100).toFixed(0)}%`;
 }
+
+// 监听渲染器视口平移与滚轮缩放事件，即时刷新状态栏
+renderer.onViewChange = () => {
+    updateStatusUI();
+};
 
 // 注册画布要素拾取回调
 renderer.onClickFeature = (hit) => {

@@ -103,8 +103,9 @@ export class TileRenderer {
         this.requestRender();
     }
 
-    setSelectedFeature(feat) {
+    setSelectedFeature(feat, layer = null) {
         this.selectedFeature = feat;
+        this.selectedFeatureLayer = layer;
         this.requestRender();
     }
 
@@ -139,6 +140,7 @@ export class TileRenderer {
                 this.lastMouseX = e.clientX;
                 this.lastMouseY = e.clientY;
                 this.requestRender();
+                if (this.onViewChange) this.onViewChange();
             }
         });
 
@@ -186,12 +188,13 @@ export class TileRenderer {
 
             this.zoom = newZoom;
             this.requestRender();
+            if (this.onViewChange) this.onViewChange();
         }, { passive: false });
 
         c.addEventListener('click', (e) => {
             if (!this.tileData || !this.onClickFeature) return;
             const hit = this.hitTest(e.clientX, e.clientY);
-            this.setSelectedFeature(hit ? hit.feature : null);
+            this.setSelectedFeature(hit ? hit.feature : null, hit ? hit.layer : null);
             this.onClickFeature(hit);
         });
     }
@@ -259,6 +262,7 @@ export class TileRenderer {
             if (!layer.visible) continue;
             for (const feat of layer.features) {
                 if (feat.type !== 1) continue;
+                if (feat.bbox && (pt.x < feat.bbox[0] - tolerance || pt.x > feat.bbox[2] + tolerance || pt.y < feat.bbox[1] - tolerance || pt.y > feat.bbox[3] + tolerance)) continue;
                 for (const ring of feat.geometry) {
                     for (const p of ring) {
                         if (Math.hypot(p.x - pt.x, p.y - pt.y) <= tolerance) {
@@ -275,6 +279,7 @@ export class TileRenderer {
             if (!layer.visible) continue;
             for (const feat of layer.features) {
                 if (feat.type !== 2) continue;
+                if (feat.bbox && (pt.x < feat.bbox[0] - tolerance || pt.x > feat.bbox[2] + tolerance || pt.y < feat.bbox[1] - tolerance || pt.y > feat.bbox[3] + tolerance)) continue;
                 for (const line of feat.geometry) {
                     for (let k = 0; k < line.length - 1; k++) {
                         if (distToSegment(pt, line[k], line[k + 1]) <= tolerance) {
@@ -291,6 +296,7 @@ export class TileRenderer {
             if (!layer.visible) continue;
             for (const feat of layer.features) {
                 if (feat.type !== 3) continue;
+                if (feat.bbox && (pt.x < feat.bbox[0] - tolerance || pt.x > feat.bbox[2] + tolerance || pt.y < feat.bbox[1] - tolerance || pt.y > feat.bbox[3] + tolerance)) continue;
                 // 外环包含且未落在内环中
                 let inside = false;
                 for (const ring of feat.geometry) {
@@ -365,8 +371,8 @@ export class TileRenderer {
             this.renderLayer(ctx, layer, scale);
         }
 
-        // 绘制当前高亮选中的要素
-        if (this.selectedFeature) {
+        // 绘制当前高亮选中的要素（仅在图层可见时绘制）
+        if (this.selectedFeature && (!this.selectedFeatureLayer || this.selectedFeatureLayer.visible)) {
             this.renderHighlight(ctx, this.selectedFeature, scale);
         }
 
