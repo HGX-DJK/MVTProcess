@@ -90,6 +90,34 @@ export class TileRenderer {
         this.setZoom(this.zoom * factor);
     }
 
+    /**
+     * 智能定位并居中缩放至特定要素
+     */
+    zoomToFeature(feat) {
+        if (!feat || !this.tileData) return;
+        const extent = this.tileData.extent || 4096;
+        const rect = this.canvas.getBoundingClientRect();
+        const baseScale = Math.min(rect.width, rect.height) / extent;
+
+        const [minX, minY, maxX, maxY] = feat.bbox || [0, 0, extent, extent];
+        const featCenterX = (minX + maxX) / 2;
+        const featCenterY = (minY + maxY) / 2;
+        const featWidth = Math.max(maxX - minX, 40);
+        const featHeight = Math.max(maxY - minY, 40);
+
+        // 缩放至占视口约 40% 区域，且在 0.5 ~ 35 范围内安全截断
+        const targetZoom = Math.max(0.5, Math.min((extent / Math.max(featWidth, featHeight)) * 0.4, 35));
+
+        const scale = baseScale * targetZoom;
+        this.panX = -(featCenterX - extent / 2) * scale;
+        this.panY = -(featCenterY - extent / 2) * scale;
+        this.zoom = targetZoom;
+
+        this.setSelectedFeature(feat, this.selectedFeatureLayer);
+        this.requestRender();
+        if (this.onViewChange) this.onViewChange();
+    }
+
     setTheme(themeName) {
         if (themeName === 'light') {
             this.options.theme = 'light';
@@ -395,10 +423,38 @@ export class TileRenderer {
             this.drawLineString(ctx, feat.geometry, color, lineWidth * 1.5);
         }
 
-        // 3. Points
-        for (const feat of layer.features) {
-            if (feat.type !== 1) continue;
-            this.drawPoint(ctx, feat, color, scale);
+        // 3. Points（批量合并圆点路径，减少数千次独立的 beginPath/fill/stroke 开销）
+        const pointFeatures = [];
+        for (let i = 0; i < layer.features.length; i++) {
+            if (layer.features[i].type === 1) pointFeatures.push(layer.features[i]);
+        }
+
+        if (pointFeatures.length > 0) {
+            const radius = Math.max(2.5, 4 / scale);
+            ctx.beginPath();
+            for (let i = 0; i < pointFeatures.length; i++) {
+                const geom = pointFeatures[i].geometry;
+                for (let r = 0; r < geom.length; r++) {
+                    const points = geom[r];
+                    for (let p = 0; p < points.length; p++) {
+                        const pt = points[p];
+                        ctx.moveTo(pt.x + radius, pt.y);
+                        ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
+                    }
+                }
+            }
+            ctx.fillStyle = color.stroke;
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = Math.max(0.5, 1 / scale);
+            ctx.stroke();
+
+            // 绘制文字标注
+            if (this.options.showLabels) {
+                for (let i = 0; i < pointFeatures.length; i++) {
+                    this.drawPointLabels(ctx, pointFeatures[i], scale, radius);
+                }
+            }
         }
     }
 
@@ -439,38 +495,26 @@ export class TileRenderer {
         ctx.stroke();
     }
 
-    drawPoint(ctx, feat, color, scale) {
-        const radius = Math.max(2.5, 4 / scale);
-        const geom = feat.geometry;
+    drawPointLabels(ctx, feat, scale, radius) {
+        if (!feat.properties) return;
+        const label = feat.properties.name || feat.properties.name_zh || feat.properties.name_en || feat.properties.title;
+        if (!label || typeof label !== 'string' || label.trim() === '') return;
 
+        const geom = feat.geometry;
         for (let i = 0; i < geom.length; i++) {
             const points = geom[i];
             for (let j = 0; j < points.length; j++) {
                 const pt = points[j];
-
-                ctx.beginPath();
-                ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
-                ctx.fillStyle = color.stroke;
-                ctx.fill();
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = Math.max(0.5, 1 / scale);
-                ctx.stroke();
-
-                if (this.options.showLabels && feat.properties) {
-                    const label = feat.properties.name || feat.properties.name_zh || feat.properties.name_en || feat.properties.title;
-                    if (label && typeof label === 'string' && label.trim() !== '') {
-                        const fontSize = Math.max(10, 12 / scale);
-                        ctx.font = `${fontSize}px -apple-system, sans-serif`;
-                        const isLight = this.options.theme === 'light';
-                        ctx.textAlign = 'left';
-                        ctx.textBaseline = 'middle';
-                        ctx.strokeStyle = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(15, 23, 42, 0.95)';
-                        ctx.lineWidth = Math.max(2, 3 / scale);
-                        ctx.strokeText(label, pt.x + radius + 3 / scale, pt.y);
-                        ctx.fillStyle = isLight ? '#0f172a' : '#f8fafc';
-                        ctx.fillText(label, pt.x + radius + 3 / scale, pt.y);
-                    }
-                }
+                const fontSize = Math.max(10, 12 / scale);
+                ctx.font = `${fontSize}px -apple-system, sans-serif`;
+                const isLight = this.options.theme === 'light';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.strokeStyle = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(15, 23, 42, 0.95)';
+                ctx.lineWidth = Math.max(2, 3 / scale);
+                ctx.strokeText(label, pt.x + radius + 3 / scale, pt.y);
+                ctx.fillStyle = isLight ? '#0f172a' : '#f8fafc';
+                ctx.fillText(label, pt.x + radius + 3 / scale, pt.y);
             }
         }
     }

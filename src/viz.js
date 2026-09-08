@@ -19,6 +19,7 @@ const btnToggleTheme = document.getElementById('btn-toggle-theme');
 const btnToggleAllLayers = document.getElementById('btn-toggle-all-layers');
 const btnClearFiles = document.getElementById('btn-clear-files');
 const btnCopyFeatureJson = document.getElementById('btn-copy-feature-json');
+const btnZoomToFeature = document.getElementById('btn-zoom-to-feature');
 
 const fileListEl = document.getElementById('file-list');
 const layerListEl = document.getElementById('layer-list');
@@ -320,6 +321,7 @@ function exportLayerGeoJSON(tile, layerName) {
 function clearInspectorUI() {
     state.selectedFeatureContext = null;
     btnCopyFeatureJson.style.display = 'none';
+    btnZoomToFeature.style.display = 'none';
     inspectorContent.innerHTML = `
         <div class="empty-tip">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -338,6 +340,7 @@ function clearInspectorUI() {
 function showFeatureInspector(layer, feature) {
     state.selectedFeatureContext = { layer, feature };
     btnCopyFeatureJson.style.display = 'inline-block';
+    btnZoomToFeature.style.display = 'inline-block';
 
     const props = feature.properties || {};
     const propKeys = Object.keys(props);
@@ -627,4 +630,35 @@ btnExportGeoJSON.addEventListener('click', () => {
     a.download = `${current.name}.geojson`;
     a.click();
     URL.revokeObjectURL(url);
+});
+
+// 聚焦居中定位至当前要素
+btnZoomToFeature.addEventListener('click', () => {
+    if (state.selectedFeatureContext && state.selectedFeatureContext.feature) {
+        renderer.zoomToFeature(state.selectedFeatureContext.feature);
+    }
+});
+
+// 全局快捷键支持 (+ / - / R / L / T / Esc)
+window.addEventListener('keydown', (e) => {
+    // 处于输入框中时不触发快捷键
+    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+    if (e.key === '+' || e.key === '=') {
+        renderer.zoomBy(1.25);
+        updateStatusUI();
+    } else if (e.key === '-' || e.key === '_') {
+        renderer.zoomBy(0.8);
+        updateStatusUI();
+    } else if (e.key.toLowerCase() === 'r') {
+        renderer.resetView();
+        updateStatusUI();
+    } else if (e.key.toLowerCase() === 'l') {
+        btnToggleLabels.click();
+    } else if (e.key.toLowerCase() === 't') {
+        btnToggleTheme.click();
+    } else if (e.key === 'Escape') {
+        renderer.setSelectedFeature(null);
+        clearInspectorUI();
+    }
 });
