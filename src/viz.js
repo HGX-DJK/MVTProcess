@@ -256,13 +256,29 @@ function updateLayerListUI(tile) {
             renderer.requestRender();
         });
 
-        // 颜色选择器监听
+        // 颜色选择器与色块容器
+        const swatchContainer = item.querySelector('.layer-swatch-container');
         const colorInput = item.querySelector('.layer-color-input');
         const swatchSpan = item.querySelector('.layer-swatch');
+
+        swatchContainer.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        colorInput.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
         colorInput.addEventListener('input', (e) => {
+            e.stopPropagation();
             const newHex = e.target.value;
             swatchSpan.style.backgroundColor = newHex;
             renderer.setLayerColor(layer.name, newHex);
+            // 同步更新右侧属性面板中的小图层色块
+            if (state.selectedFeatureContext && state.selectedFeatureContext.layer.name === layer.name) {
+                const badge = inspectorContent.querySelector('.inspector-layer-badge');
+                if (badge) badge.style.backgroundColor = newHex;
+            }
         });
 
         // 导出单图层
@@ -273,7 +289,7 @@ function updateLayerListUI(tile) {
         });
 
         item.addEventListener('click', (e) => {
-            if (e.target !== checkbox && e.target !== exportBtn && e.target !== colorInput) {
+            if (e.target !== checkbox && e.target !== exportBtn && !swatchContainer.contains(e.target)) {
                 checkbox.checked = !checkbox.checked;
                 layer.visible = checkbox.checked;
                 renderer.requestRender();
@@ -353,7 +369,7 @@ function showFeatureInspector(layer, feature) {
     inspectorContent.innerHTML = `
         <div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border-color);">
             <div style="font-size:14px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:6px;">
-                <span style="width:10px;height:10px;border-radius:2px;background:${layer.color.stroke};display:inline-block;"></span>
+                <span class="inspector-layer-badge" style="width:10px;height:10px;border-radius:2px;background:${layer.color.stroke};display:inline-block;"></span>
                 ${layer.name}
             </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">
@@ -550,19 +566,24 @@ btnExportPng.addEventListener('click', () => {
     renderer.exportImage(`${current.name}_snapshot.png`);
 });
 
-// 地名标注开关
+// 地名标注开关初始化
+btnToggleLabels.classList.add('btn-active');
+btnToggleLabels.textContent = '🏷 标注: 开';
 btnToggleLabels.addEventListener('click', () => {
     state.showLabels = !state.showLabels;
     renderer.options.showLabels = state.showLabels;
-    btnToggleLabels.style.opacity = state.showLabels ? '1' : '0.5';
+    btnToggleLabels.classList.toggle('btn-active', state.showLabels);
+    btnToggleLabels.textContent = state.showLabels ? '🏷 标注: 开' : '🏷 标注: 关';
     renderer.requestRender();
 });
 
-// 底色模式切换（深色 / 浅色）
+// 全站主题模式切换（深色 / 浅色）
 btnToggleTheme.addEventListener('click', () => {
     state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', state.theme);
     renderer.setTheme(state.theme);
     btnToggleTheme.textContent = state.theme === 'dark' ? '🌓 底色' : '☀️ 底色';
+    btnToggleTheme.classList.toggle('btn-active', state.theme === 'light');
 });
 
 // 图层全选 / 全不选

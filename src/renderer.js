@@ -455,9 +455,13 @@ export class TileRenderer {
                     if (label && typeof label === 'string' && label.trim() !== '') {
                         const fontSize = Math.max(10, 12 / scale);
                         ctx.font = `${fontSize}px -apple-system, sans-serif`;
-                        ctx.fillStyle = this.options.theme === 'light' ? '#0f172a' : '#f3f4f6';
+                        const isLight = this.options.theme === 'light';
                         ctx.textAlign = 'left';
                         ctx.textBaseline = 'middle';
+                        ctx.strokeStyle = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(15, 23, 42, 0.95)';
+                        ctx.lineWidth = Math.max(2, 3 / scale);
+                        ctx.strokeText(label, pt.x + radius + 3 / scale, pt.y);
+                        ctx.fillStyle = isLight ? '#0f172a' : '#f8fafc';
                         ctx.fillText(label, pt.x + radius + 3 / scale, pt.y);
                     }
                 }

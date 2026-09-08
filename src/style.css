@@ -13,6 +13,22 @@
     --success: #10b981;
     --warning: #f59e0b;
     --danger: #ef4444;
+    --card-shadow: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] {
+    --bg-primary: #f1f5f9;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f8fafc;
+    --bg-hover: #e2e8f0;
+    --border-color: #cbd5e1;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --accent-light: rgba(37, 99, 235, 0.1);
+    --card-shadow: rgba(0, 0, 0, 0.08);
 }
 
 * {
@@ -389,14 +405,22 @@ body {
     color: var(--accent);
 }
 
+.btn-active {
+    background-color: var(--accent-light) !important;
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+    font-weight: 600;
+}
+
 /* 浮动状态条 */
 .floating-status {
     position: absolute;
     bottom: 12px;
     left: 12px;
-    background-color: rgba(24, 27, 36, 0.85);
-    backdrop-filter: blur(6px);
+    background-color: var(--bg-secondary);
+    backdrop-filter: blur(8px);
     border: 1px solid var(--border-color);
+    box-shadow: 0 2px 8px var(--card-shadow);
     padding: 6px 12px;
     border-radius: 6px;
     font-size: 11px;
@@ -500,11 +524,11 @@ body {
     position: absolute;
     display: none;
     pointer-events: none;
-    background-color: rgba(15, 17, 23, 0.94);
+    background-color: var(--bg-secondary);
     backdrop-filter: blur(8px);
-    border: 1px solid rgba(59, 130, 246, 0.45);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
-    color: #f3f4f6;
+    border: 1px solid var(--accent);
+    box-shadow: 0 4px 14px var(--card-shadow);
+    color: var(--text-primary);
     padding: 6px 10px;
     border-radius: 6px;
     font-size: 11px;
@@ -527,7 +551,7 @@ body {
 }
 
 .hover-tooltip-val {
-    color: #d1d5db;
+    color: var(--text-secondary);
     font-size: 11px;
 }
 
