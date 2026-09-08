@@ -13,16 +13,19 @@ const btnResetView = document.getElementById('btn-reset-view');
 const btnZoomIn = document.getElementById('btn-zoom-in');
 const btnZoomOut = document.getElementById('btn-zoom-out');
 const btnExportGeoJSON = document.getElementById('btn-export-geojson');
+const btnExportPng = document.getElementById('btn-export-png');
 const btnToggleLabels = document.getElementById('btn-toggle-labels');
 const btnToggleTheme = document.getElementById('btn-toggle-theme');
 const btnToggleAllLayers = document.getElementById('btn-toggle-all-layers');
 const btnClearFiles = document.getElementById('btn-clear-files');
+const btnCopyFeatureJson = document.getElementById('btn-copy-feature-json');
 
 const fileListEl = document.getElementById('file-list');
 const layerListEl = document.getElementById('layer-list');
 const layerSearchInput = document.getElementById('layer-search');
 const tileInfoPanel = document.getElementById('tile-info');
 const inspectorContent = document.getElementById('inspector-content');
+const hoverTooltipEl = document.getElementById('hover-tooltip');
 const statusZoomEl = document.getElementById('status-zoom');
 const statusCoordEl = document.getElementById('status-coord');
 
@@ -32,7 +35,8 @@ const state = {
     activeFileIndex: -1,
     showLabels: true,
     allLayersVisible: true,
-    theme: 'dark'
+    theme: 'dark',
+    selectedFeatureContext: null // { layer, feature }
 };
 
 // 初始化 Canvas 渲染器
@@ -94,6 +98,7 @@ async function loadTileBuffer(arrayBuffer, fileName) {
 function switchActiveFile(index) {
     if (index < 0 || index >= state.files.length) {
         state.activeFileIndex = -1;
+        state.selectedFeatureContext = null;
         renderer.setTileData(null);
         updateFileListUI();
         updateTileInfoUI(null);
@@ -104,6 +109,7 @@ function switchActiveFile(index) {
     }
 
     state.activeFileIndex = index;
+    state.selectedFeatureContext = null;
     const activeItem = state.files[index];
     renderer.setTileData(activeItem.parsedTile);
 
@@ -157,7 +163,7 @@ function updateFileListUI() {
                 <div class="file-name" title="${f.name}">${f.name}</div>
                 <div class="file-meta">${formatFileSize(f.size)} · ${f.parsedTile.layers.length} 图层</div>
             </div>
-            <button class="file-del-btn" title="关闭该文件" style="background:none;border:none;color:var(--text-muted);font-size:14px;cursor:pointer;padding:2px 6px;border-radius:3px;">×</button>
+            <button class="file-del-btn" title="关闭该文件">×</button>
         `;
 
         item.querySelector('.file-del-btn').addEventListener('click', (e) => removeFile(idx, e));
@@ -195,7 +201,15 @@ function updateTileInfoUI(tile) {
 }
 
 /**
- * 更新图层列表 UI（支持按名称搜索、单个图层 GeoJSON 导出、图层隔离）
+ * 将 RGB/RGBA 转换为 HEX 供原生 color picker 使用
+ */
+function colorToHex(colorStr) {
+    if (colorStr && colorStr.startsWith('#')) return colorStr.slice(0, 7);
+    return '#3b82f6';
+}
+
+/**
+ * 更新图层列表 UI（支持按名称搜索、单个图层 GeoJSON 导出、颜色自定义）
  */
 function updateLayerListUI(tile) {
     layerListEl.innerHTML = '';
@@ -219,22 +233,36 @@ function updateLayerListUI(tile) {
         if (layer.counts.lines > 0) typesDesc.push(`线:${layer.counts.lines}`);
         if (layer.counts.points > 0) typesDesc.push(`点:${layer.counts.points}`);
 
+        const hexVal = colorToHex(layer.color.stroke);
+
         item.innerHTML = `
             <div class="layer-left">
-                <input type="checkbox" ${layer.visible ? 'checked' : ''} style="cursor:pointer;" title="显隐控制">
-                <span class="layer-swatch" style="background-color: ${layer.color.stroke};"></span>
+                <input type="checkbox" class="layer-chk" ${layer.visible ? 'checked' : ''} style="cursor:pointer;" title="显隐控制">
+                <div class="layer-swatch-container" title="点击更改图层颜色">
+                    <span class="layer-swatch" style="background-color: ${layer.color.stroke};"></span>
+                    <input type="color" class="layer-color-input" value="${hexVal}">
+                </div>
                 <span class="layer-title" title="${layer.name}">${layer.name}</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
                 <span class="layer-count" title="${typesDesc.join(' | ')}">${layer.counts.total}</span>
-                <button class="layer-export-btn" title="单独导出本图层为 GeoJSON" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:11px;padding:2px 4px;border-radius:3px;">💾</button>
+                <button class="layer-export-btn" title="单独导出本图层为 GeoJSON">💾</button>
             </div>
         `;
 
-        const checkbox = item.querySelector('input[type="checkbox"]');
+        const checkbox = item.querySelector('.layer-chk');
         checkbox.addEventListener('change', (e) => {
             layer.visible = e.target.checked;
             renderer.requestRender();
+        });
+
+        // 颜色选择器监听
+        const colorInput = item.querySelector('.layer-color-input');
+        const swatchSpan = item.querySelector('.layer-swatch');
+        colorInput.addEventListener('input', (e) => {
+            const newHex = e.target.value;
+            swatchSpan.style.backgroundColor = newHex;
+            renderer.setLayerColor(layer.name, newHex);
         });
 
         // 导出单图层
@@ -245,7 +273,7 @@ function updateLayerListUI(tile) {
         });
 
         item.addEventListener('click', (e) => {
-            if (e.target !== checkbox && e.target !== exportBtn) {
+            if (e.target !== checkbox && e.target !== exportBtn && e.target !== colorInput) {
                 checkbox.checked = !checkbox.checked;
                 layer.visible = checkbox.checked;
                 renderer.requestRender();
@@ -274,6 +302,8 @@ function exportLayerGeoJSON(tile, layerName) {
  * 清空要素属性检查器
  */
 function clearInspectorUI() {
+    state.selectedFeatureContext = null;
+    btnCopyFeatureJson.style.display = 'none';
     inspectorContent.innerHTML = `
         <div class="empty-tip">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -287,41 +317,95 @@ function clearInspectorUI() {
 }
 
 /**
- * 展示要素属性详情
+ * 展示要素属性详情并支持属性搜索与复制
  */
 function showFeatureInspector(layer, feature) {
+    state.selectedFeatureContext = { layer, feature };
+    btnCopyFeatureJson.style.display = 'inline-block';
+
     const props = feature.properties || {};
     const propKeys = Object.keys(props);
 
-    let rowsHtml = '';
-    if (propKeys.length === 0) {
-        rowsHtml = '<tr><td colspan="2" style="color:var(--text-muted);text-align:center;">该要素无属性标签</td></tr>';
-    } else {
+    function renderPropsTable(filterText = '') {
+        const lowerFilter = filterText.toLowerCase();
+        let rowsHtml = '';
+        let matchedCount = 0;
+
         propKeys.forEach(key => {
-            rowsHtml += `
-                <tr>
-                    <td class="prop-key">${key}</td>
-                    <td class="prop-val">${String(props[key])}</td>
-                </tr>
-            `;
+            const valStr = String(props[key]);
+            if (!filterText || key.toLowerCase().includes(lowerFilter) || valStr.toLowerCase().includes(lowerFilter)) {
+                matchedCount++;
+                rowsHtml += `
+                    <tr>
+                        <td class="prop-key">${key}</td>
+                        <td class="prop-val">${valStr}</td>
+                    </tr>
+                `;
+            }
         });
+
+        if (matchedCount === 0) {
+            rowsHtml = '<tr><td colspan="2" style="color:var(--text-muted);text-align:center;padding:12px;">无匹配属性</td></tr>';
+        }
+        return rowsHtml;
     }
 
     inspectorContent.innerHTML = `
-        <div style="margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border-color);">
-            <div style="font-size:14px;font-weight:600;color:var(--accent);">${layer.name}</div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
-                类型: <b>${feature.typeName}</b> | ID: <b>${feature.id}</b>
+        <div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border-color);">
+            <div style="font-size:14px;font-weight:600;color:var(--accent);display:flex;align-items:center;gap:6px;">
+                <span style="width:10px;height:10px;border-radius:2px;background:${layer.color.stroke};display:inline-block;"></span>
+                ${layer.name}
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">
+                类型: <b>${feature.typeName}</b> | ID: <b>${feature.id}</b> | 属性: <b>${propKeys.length} 项</b>
             </div>
         </div>
+        ${propKeys.length > 5 ? `
+            <div class="prop-search-box">
+                <input type="text" id="prop-filter-input" class="prop-search-input" placeholder="搜索属性名或值...">
+            </div>
+        ` : ''}
         <table class="props-table">
             <thead>
                 <tr><th>属性名</th><th>属性值</th></tr>
             </thead>
-            <tbody>${rowsHtml}</tbody>
+            <tbody id="props-table-body">${renderPropsTable()}</tbody>
         </table>
     `;
+
+    const filterInput = document.getElementById('prop-filter-input');
+    if (filterInput) {
+        filterInput.addEventListener('input', (e) => {
+            const tbody = document.getElementById('props-table-body');
+            if (tbody) {
+                tbody.innerHTML = renderPropsTable(e.target.value.trim());
+            }
+        });
+    }
 }
+
+/**
+ * 复制当前要素属性为 JSON 到剪贴板
+ */
+btnCopyFeatureJson.addEventListener('click', () => {
+    if (!state.selectedFeatureContext) return;
+    const { layer, feature } = state.selectedFeatureContext;
+    const data = {
+        layer: layer.name,
+        type: feature.typeName,
+        id: feature.id,
+        properties: feature.properties
+    };
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
+        const originalText = btnCopyFeatureJson.textContent;
+        btnCopyFeatureJson.textContent = '✓ 已复制';
+        setTimeout(() => {
+            btnCopyFeatureJson.textContent = originalText;
+        }, 1500);
+    }).catch(err => {
+        alert('复制失败: ' + err.message);
+    });
+});
 
 /**
  * 更新底部状态栏
@@ -337,6 +421,42 @@ renderer.onClickFeature = (hit) => {
     } else {
         clearInspectorUI();
     }
+};
+
+// 注册鼠标悬浮提示回调
+renderer.onHoverFeature = (hit, clientX, clientY) => {
+    if (!hit) {
+        hoverTooltipEl.style.display = 'none';
+        return;
+    }
+
+    const rect = canvasWrapper.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    const props = hit.feature.properties || {};
+    const primaryLabel = props.name || props.name_zh || props.name_en || props.title || props.class || '';
+
+    hoverTooltipEl.innerHTML = `
+        <div class="hover-tooltip-layer">
+            <span style="width:8px;height:8px;border-radius:2px;background:${hit.layer.color.stroke};display:inline-block;"></span>
+            ${hit.layer.name} · ${hit.feature.typeName}
+        </div>
+        ${primaryLabel 
+            ? `<div class="hover-tooltip-val">${primaryLabel}</div>` 
+            : `<div class="hover-tooltip-val" style="color:var(--text-muted)">ID: ${hit.feature.id}</div>`
+        }
+    `;
+
+    // 边界检测防止溢出屏幕右侧或下侧
+    let posX = x + 14;
+    let posY = y + 14;
+    if (posX + 200 > rect.width) posX = x - 180;
+    if (posY + 60 > rect.height) posY = y - 50;
+
+    hoverTooltipEl.style.left = `${posX}px`;
+    hoverTooltipEl.style.top = `${posY}px`;
+    hoverTooltipEl.style.display = 'block';
 };
 
 canvas.addEventListener('mousemove', (e) => {
@@ -418,6 +538,16 @@ btnZoomIn.addEventListener('click', () => {
 btnZoomOut.addEventListener('click', () => {
     renderer.zoomBy(0.8);
     updateStatusUI();
+});
+
+// 导出画布高清 PNG 截图
+btnExportPng.addEventListener('click', () => {
+    if (state.activeFileIndex < 0) {
+        alert('请先载入瓦片数据再截图');
+        return;
+    }
+    const current = state.files[state.activeFileIndex];
+    renderer.exportImage(`${current.name}_snapshot.png`);
 });
 
 // 地名标注开关

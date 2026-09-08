@@ -149,6 +149,27 @@ export class TileRenderer {
             }
         });
 
+        // 鼠标悬浮要素检测与光标切换
+        let hoverTimer = null;
+        c.addEventListener('mousemove', (e) => {
+            if (this.isDragging) return;
+            if (hoverTimer) cancelAnimationFrame(hoverTimer);
+            hoverTimer = requestAnimationFrame(() => {
+                if (this.isDragging || !this.tileData) return;
+                const hit = this.hitTest(e.clientX, e.clientY);
+                c.style.cursor = hit ? 'pointer' : 'grab';
+                if (this.onHoverFeature) {
+                    this.onHoverFeature(hit, e.clientX, e.clientY);
+                }
+            });
+        });
+
+        c.addEventListener('mouseleave', () => {
+            if (this.onHoverFeature) {
+                this.onHoverFeature(null, 0, 0);
+            }
+        });
+
         c.addEventListener('wheel', (e) => {
             e.preventDefault();
             const rect = c.getBoundingClientRect();
@@ -173,6 +194,32 @@ export class TileRenderer {
             this.setSelectedFeature(hit ? hit.feature : null);
             this.onClickFeature(hit);
         });
+    }
+
+    /**
+     * 导出当前画布为 PNG 图像下载
+     */
+    exportImage(fileName = 'tile_screenshot.png') {
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = this.canvas.toDataURL('image/png');
+        link.click();
+    }
+
+    /**
+     * 动态设置指定图层的颜色
+     */
+    setLayerColor(layerName, hexColor) {
+        if (!this.tileData) return;
+        const layer = this.tileData.layers.find(l => l.name === layerName);
+        if (layer) {
+            layer.color.stroke = hexColor;
+            const r = parseInt(hexColor.slice(1, 3), 16) || 0;
+            const g = parseInt(hexColor.slice(3, 5), 16) || 0;
+            const b = parseInt(hexColor.slice(5, 7), 16) || 0;
+            layer.color.fill = `rgba(${r}, ${g}, ${b}, 0.35)`;
+            this.requestRender();
+        }
     }
 
     screenToTile(screenX, screenY) {

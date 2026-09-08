@@ -29,6 +29,7 @@
             <button class="btn" id="btn-reset-view" title="居中并重置缩放">⟲ 复位</button>
             <button class="btn" id="btn-toggle-labels" title="开启/关闭地名标注">🏷 标注</button>
             <button class="btn" id="btn-toggle-theme" title="切换深色/浅色底色">🌓 底色</button>
+            <button class="btn" id="btn-export-png" title="将当前视图导出为高清 PNG 图片">📷 截图</button>
             <button class="btn" id="btn-export-geojson" title="将当前瓦片导出为标准 GeoJSON 文件">💾 导出 GeoJSON</button>
         </div>
     </header>
@@ -79,6 +80,9 @@
         <section class="canvas-wrapper" id="canvas-wrapper">
             <canvas id="canvas"></canvas>
 
+            <!-- 悬浮提示气泡 -->
+            <div id="hover-tooltip" class="hover-tooltip"></div>
+
             <!-- 拖拽放置指示 -->
             <div class="drop-overlay">
                 <div class="drop-text">释放鼠标以载入矢量瓦片</div>
@@ -89,7 +93,7 @@
             <div class="floating-status">
                 <span id="status-zoom">缩放: 100%</span>
                 <span id="status-coord">坐标: (0, 0)</span>
-                <span>操作: 滚轮缩放 / 鼠标左键拖拽平移</span>
+                <span>操作: 滚轮缩放 / 鼠标左键拖拽平移 / 点击拾取要素</span>
             </div>
         </section>
 
@@ -97,6 +101,7 @@
         <aside class="sidebar-right" id="sidebar-right">
             <div class="section-header">
                 <span>要素属性检查器</span>
+                <button class="btn" id="btn-copy-feature-json" style="padding: 2px 6px; font-size: 11px; display: none;" title="复制选中要素属性为 JSON">📋 复制</button>
             </div>
             <div class="inspector-content" id="inspector-content">
                 <div class="empty-tip">
@@ -105,7 +110,7 @@
                         <line x1="12" y1="16" x2="12" y2="12"></line>
                         <line x1="12" y1="8" x2="12.01" y2="8"></line>
                     </svg>
-                    <div>点击画布中的要素以查看属性</div>
+                    <div>点击画布中的点、线或面要素查看属性详情</div>
                 </div>
             </div>
         </aside>
