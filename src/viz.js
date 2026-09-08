@@ -14,7 +14,9 @@ const btnZoomIn = document.getElementById('btn-zoom-in');
 const btnZoomOut = document.getElementById('btn-zoom-out');
 const btnExportGeoJSON = document.getElementById('btn-export-geojson');
 const btnToggleLabels = document.getElementById('btn-toggle-labels');
+const btnToggleTheme = document.getElementById('btn-toggle-theme');
 const btnToggleAllLayers = document.getElementById('btn-toggle-all-layers');
+const btnClearFiles = document.getElementById('btn-clear-files');
 
 const fileListEl = document.getElementById('file-list');
 const layerListEl = document.getElementById('layer-list');
@@ -24,23 +26,29 @@ const inspectorContent = document.getElementById('inspector-content');
 const statusZoomEl = document.getElementById('status-zoom');
 const statusCoordEl = document.getElementById('status-coord');
 
-// 状态管理
+// 全局状态
 const state = {
     files: [], // { name, size, parsedTile }
     activeFileIndex: -1,
     showLabels: true,
-    allLayersVisible: true
+    allLayersVisible: true,
+    theme: 'dark'
 };
 
-// 初始化渲染器
+// 初始化 Canvas 渲染器
 const renderer = new TileRenderer(canvas, {
-    showLabels: state.showLabels
+    showLabels: state.showLabels,
+    theme: state.theme
 });
 
-// 响应式自适应尺寸
+// 响应窗口尺寸变化
 window.addEventListener('resize', () => {
     renderer.resize();
 });
+
+// 全局拦截窗口拖拽事件，防止拖至边框或侧边栏时浏览器默认打开文件
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => e.preventDefault());
 
 // 格式化文件大小
 function formatFileSize(bytes) {
@@ -56,17 +64,17 @@ function formatFileSize(bytes) {
  */
 async function loadTileBuffer(arrayBuffer, fileName) {
     try {
-        console.log(`[MVTProcess] 正在加载文件: ${fileName}, 原始大小: ${arrayBuffer.byteLength} 字节`);
+        console.log(`[MVTProcess] 加载文件: ${fileName}, 原始大小: ${arrayBuffer.byteLength} 字节`);
 
-        // 1. 自动检测并解压 Gzip / Deflate 格式（解决 6694 压缩问题）
+        // 1. 自动检测并解压 Gzip / Deflate
         const decompressed = await decompressIfNeeded(arrayBuffer);
 
         // 2. 解析矢量瓦片
         const parsedTile = parseVectorTile(decompressed, fileName);
-        console.log(`[MVTProcess] 解析完成:`, parsedTile);
 
-        // 3. 加入文件管理器
+        // 3. 加入文件列表
         const fileItem = {
+            id: Date.now() + Math.random().toString(36).substr(2, 5),
             name: fileName,
             size: arrayBuffer.byteLength,
             parsedTile: parsedTile
@@ -74,20 +82,28 @@ async function loadTileBuffer(arrayBuffer, fileName) {
 
         state.files.push(fileItem);
         switchActiveFile(state.files.length - 1);
-        updateFileListUI();
     } catch (err) {
         console.error(`[MVTProcess] 解析瓦片 ${fileName} 失败:`, err);
-        alert(`解析文件 [${fileName}] 失败:\n${err.message}\n请检查控制台获取详细错误信息。`);
+        alert(`解析文件 [${fileName}] 失败:\n${err.message}\n请检查控制台了解详情。`);
     }
 }
 
 /**
- * 切换当前选中的瓦片文件
+ * 切换当前显示的瓦片文件
  */
 function switchActiveFile(index) {
-    if (index < 0 || index >= state.files.length) return;
-    state.activeFileIndex = index;
+    if (index < 0 || index >= state.files.length) {
+        state.activeFileIndex = -1;
+        renderer.setTileData(null);
+        updateFileListUI();
+        updateTileInfoUI(null);
+        updateLayerListUI(null);
+        clearInspectorUI();
+        updateStatusUI();
+        return;
+    }
 
+    state.activeFileIndex = index;
     const activeItem = state.files[index];
     renderer.setTileData(activeItem.parsedTile);
 
@@ -99,24 +115,59 @@ function switchActiveFile(index) {
 }
 
 /**
- * 更新文件列表界面
+ * 移除指定文件
+ */
+function removeFile(index, e) {
+    if (e) e.stopPropagation();
+    state.files.splice(index, 1);
+
+    if (state.files.length === 0) {
+        switchActiveFile(-1);
+    } else if (state.activeFileIndex >= state.files.length) {
+        switchActiveFile(state.files.length - 1);
+    } else if (state.activeFileIndex === index) {
+        switchActiveFile(Math.max(0, index - 1));
+    } else {
+        if (state.activeFileIndex > index) state.activeFileIndex--;
+        updateFileListUI();
+    }
+}
+
+/**
+ * 更新已加载文件列表 UI
  */
 function updateFileListUI() {
     fileListEl.innerHTML = '';
+    btnClearFiles.style.display = state.files.length > 0 ? 'inline-block' : 'none';
+
+    if (state.files.length === 0) {
+        fileListEl.innerHTML = `
+            <div style="color:var(--text-muted);font-size:12px;padding:12px 6px;text-align:center;">
+                暂无导入文件，请拖入瓦片
+            </div>
+        `;
+        return;
+    }
+
     state.files.forEach((f, idx) => {
         const item = document.createElement('div');
         item.className = `file-item ${idx === state.activeFileIndex ? 'active' : ''}`;
         item.innerHTML = `
-            <div class="file-name" title="${f.name}">${f.name}</div>
-            <div class="file-meta">${formatFileSize(f.size)}</div>
+            <div style="overflow:hidden;flex:1;margin-right:6px;">
+                <div class="file-name" title="${f.name}">${f.name}</div>
+                <div class="file-meta">${formatFileSize(f.size)} · ${f.parsedTile.layers.length} 图层</div>
+            </div>
+            <button class="file-del-btn" title="关闭该文件" style="background:none;border:none;color:var(--text-muted);font-size:14px;cursor:pointer;padding:2px 6px;border-radius:3px;">×</button>
         `;
+
+        item.querySelector('.file-del-btn').addEventListener('click', (e) => removeFile(idx, e));
         item.addEventListener('click', () => switchActiveFile(idx));
         fileListEl.appendChild(item);
     });
 }
 
 /**
- * 更新瓦片元信息统计
+ * 更新瓦片基础信息面板
  */
 function updateTileInfoUI(tile) {
     if (!tile) {
@@ -137,14 +188,14 @@ function updateTileInfoUI(tile) {
             <span class="stat-value">${tile.totalFeatures.toLocaleString()}</span>
         </div>
         <div class="tile-stat">
-            <span class="stat-label">数据大小</span>
+            <span class="stat-label">解压后大小</span>
             <span class="stat-value">${formatFileSize(tile.fileSize)}</span>
         </div>
     `;
 }
 
 /**
- * 更新图层列表
+ * 更新图层列表 UI（支持按名称搜索、单个图层 GeoJSON 导出、图层隔离）
  */
 function updateLayerListUI(tile) {
     layerListEl.innerHTML = '';
@@ -170,24 +221,34 @@ function updateLayerListUI(tile) {
 
         item.innerHTML = `
             <div class="layer-left">
-                <input type="checkbox" ${layer.visible ? 'checked' : ''} style="cursor:pointer;">
+                <input type="checkbox" ${layer.visible ? 'checked' : ''} style="cursor:pointer;" title="显隐控制">
                 <span class="layer-swatch" style="background-color: ${layer.color.stroke};"></span>
                 <span class="layer-title" title="${layer.name}">${layer.name}</span>
             </div>
-            <span class="layer-count" title="${typesDesc.join(' | ')}">${layer.counts.total}</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span class="layer-count" title="${typesDesc.join(' | ')}">${layer.counts.total}</span>
+                <button class="layer-export-btn" title="单独导出本图层为 GeoJSON" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:11px;padding:2px 4px;border-radius:3px;">💾</button>
+            </div>
         `;
 
         const checkbox = item.querySelector('input[type="checkbox"]');
         checkbox.addEventListener('change', (e) => {
             layer.visible = e.target.checked;
-            renderer.render();
+            renderer.requestRender();
+        });
+
+        // 导出单图层
+        const exportBtn = item.querySelector('.layer-export-btn');
+        exportBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            exportLayerGeoJSON(tile, layer.name);
         });
 
         item.addEventListener('click', (e) => {
-            if (e.target !== checkbox) {
+            if (e.target !== checkbox && e.target !== exportBtn) {
                 checkbox.checked = !checkbox.checked;
                 layer.visible = checkbox.checked;
-                renderer.render();
+                renderer.requestRender();
             }
         });
 
@@ -196,7 +257,21 @@ function updateLayerListUI(tile) {
 }
 
 /**
- * 清空属性检查器
+ * 导出单个图层为 GeoJSON
+ */
+function exportLayerGeoJSON(tile, layerName) {
+    const geojson = exportToGeoJSON(tile, layerName);
+    const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${tile.fileName}_${layerName}.geojson`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+/**
+ * 清空要素属性检查器
  */
 function clearInspectorUI() {
     inspectorContent.innerHTML = `
@@ -206,7 +281,7 @@ function clearInspectorUI() {
                 <line x1="12" y1="16" x2="12" y2="12"></line>
                 <line x1="12" y1="8" x2="12.01" y2="8"></line>
             </svg>
-            <div>点击画布中的要素以查看属性</div>
+            <div>点击画布中的点、线或面要素查看属性详情</div>
         </div>
     `;
 }
@@ -233,9 +308,9 @@ function showFeatureInspector(layer, feature) {
     }
 
     inspectorContent.innerHTML = `
-        <div style="margin-bottom:12px;">
+        <div style="margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border-color);">
             <div style="font-size:14px;font-weight:600;color:var(--accent);">${layer.name}</div>
-            <div style="font-size:11px;color:var(--text-muted);">
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
                 类型: <b>${feature.typeName}</b> | ID: <b>${feature.id}</b>
             </div>
         </div>
@@ -255,9 +330,13 @@ function updateStatusUI() {
     statusZoomEl.textContent = `缩放: ${(renderer.zoom * 100).toFixed(0)}%`;
 }
 
-// 注册画布交互回调
+// 注册画布要素拾取回调
 renderer.onClickFeature = (hit) => {
-    showFeatureInspector(hit.layer, hit.feature);
+    if (hit) {
+        showFeatureInspector(hit.layer, hit.feature);
+    } else {
+        clearInspectorUI();
+    }
 };
 
 canvas.addEventListener('mousemove', (e) => {
@@ -268,7 +347,7 @@ canvas.addEventListener('mousemove', (e) => {
     updateStatusUI();
 });
 
-// 拖拽事件支持（拖拽单个或多个文件）
+// 画布区域拖拽交互
 canvasWrapper.addEventListener('dragover', (e) => {
     e.preventDefault();
     canvasWrapper.classList.add('dragover');
@@ -297,7 +376,7 @@ canvasWrapper.addEventListener('drop', async (e) => {
     }
 });
 
-// 文件选择器
+// 打开文件选择器
 btnOpenFile.addEventListener('click', () => {
     fileInput.click();
 });
@@ -317,6 +396,14 @@ fileInput.addEventListener('change', (e) => {
     fileInput.value = '';
 });
 
+// 清空文件列表
+btnClearFiles.addEventListener('click', () => {
+    if (confirm('确认清空所有已加载的文件吗？')) {
+        state.files = [];
+        switchActiveFile(-1);
+    }
+});
+
 // 视图操作
 btnResetView.addEventListener('click', () => {
     renderer.resetView();
@@ -333,13 +420,22 @@ btnZoomOut.addEventListener('click', () => {
     updateStatusUI();
 });
 
+// 地名标注开关
 btnToggleLabels.addEventListener('click', () => {
     state.showLabels = !state.showLabels;
     renderer.options.showLabels = state.showLabels;
     btnToggleLabels.style.opacity = state.showLabels ? '1' : '0.5';
-    renderer.render();
+    renderer.requestRender();
 });
 
+// 底色模式切换（深色 / 浅色）
+btnToggleTheme.addEventListener('click', () => {
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    renderer.setTheme(state.theme);
+    btnToggleTheme.textContent = state.theme === 'dark' ? '🌓 底色' : '☀️ 底色';
+});
+
+// 图层全选 / 全不选
 btnToggleAllLayers.addEventListener('click', () => {
     if (state.activeFileIndex < 0) return;
     const tile = state.files[state.activeFileIndex].parsedTile;
@@ -351,7 +447,7 @@ btnToggleAllLayers.addEventListener('click', () => {
 
     btnToggleAllLayers.textContent = state.allLayersVisible ? '全不选' : '全选';
     updateLayerListUI(tile);
-    renderer.render();
+    renderer.requestRender();
 });
 
 // 图层搜索过滤
@@ -360,7 +456,7 @@ layerSearchInput.addEventListener('input', () => {
     updateLayerListUI(state.files[state.activeFileIndex].parsedTile);
 });
 
-// 导出当前瓦片为 GeoJSON
+// 导出整张瓦片为 GeoJSON
 btnExportGeoJSON.addEventListener('click', () => {
     if (state.activeFileIndex < 0) {
         alert('请先载入瓦片数据');

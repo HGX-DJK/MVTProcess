@@ -214,6 +214,16 @@ body {
     color: var(--text-muted);
 }
 
+.file-del-btn:hover {
+    color: var(--danger) !important;
+    background-color: rgba(239, 68, 68, 0.15) !important;
+}
+
+.layer-export-btn:hover {
+    color: var(--accent) !important;
+    background-color: var(--accent-light) !important;
+}
+
 .tile-info-panel {
     padding: 10px 14px;
     display: grid;

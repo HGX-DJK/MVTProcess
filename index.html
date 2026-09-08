@@ -28,6 +28,7 @@
             <button class="btn btn-icon" id="btn-zoom-out" title="缩小">－</button>
             <button class="btn" id="btn-reset-view" title="居中并重置缩放">⟲ 复位</button>
             <button class="btn" id="btn-toggle-labels" title="开启/关闭地名标注">🏷 标注</button>
+            <button class="btn" id="btn-toggle-theme" title="切换深色/浅色底色">🌓 底色</button>
             <button class="btn" id="btn-export-geojson" title="将当前瓦片导出为标准 GeoJSON 文件">💾 导出 GeoJSON</button>
         </div>
     </header>
@@ -40,6 +41,7 @@
             <div class="sidebar-section">
                 <div class="section-header">
                     <span>已加载文件</span>
+                    <button class="btn" id="btn-clear-files" style="padding: 1px 5px; font-size: 11px; display: none;">清空</button>
                 </div>
                 <div class="file-list" id="file-list">
                     <div style="color:var(--text-muted);font-size:12px;padding:8px 6px;text-align:center;">
